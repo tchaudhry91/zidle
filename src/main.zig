@@ -3,10 +3,14 @@ const Io = std.Io;
 
 const zidle = @import("zidle");
 
-const Command = enum {
+const Command = union(enum) {
     help,
     version,
-    scan_cgroups,
+    scan_cgroups: ScanOptions,
+};
+
+const ScanOptions = struct {
+    root: []const u8 = "/sys/fs/cgroup/",
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -32,7 +36,14 @@ pub fn main(init: std.process.Init) !void {
         return;
     }
 
-    const cmd: Command = parseCommand(args[1]) catch {
+    const cmd: Command = parseCommand(args[1..]) catch |err| {
+        if (err == error.InvalidScanCommand) {
+            // Print Scan Usage instead
+            try stdout_writer.print("invalid scan command flag\n\n", .{});
+            try printScanUsage(stdout_writer);
+            try stdout_writer.flush();
+            return;
+        }
         try stdout_writer.print("unknown command: {s}\n\n", .{args[1]});
         try printUsage(stdout_writer);
         try stdout_writer.flush();
@@ -42,15 +53,50 @@ pub fn main(init: std.process.Init) !void {
     switch (cmd) {
         .help => try printUsage(stdout_writer),
         .version => try printUsage(stdout_writer), // Wire Up Later
-        .scan_cgroups => {
-            const cgroups = try zidle.scanCGroups(io, arena);
+        .scan_cgroups => |opts| {
+            const cgroups = try zidle.scanCGroups(io, arena, opts.root);
             for (cgroups) |cg| {
-                std.debug.print("{s}\n", .{cg});
+                try stdout_writer.print("{s}\n", .{cg});
             }
+            try stdout_writer.flush();
         },
     }
 
     try stdout_writer.flush(); // Don't forget to flush!
+}
+
+fn parseCommand(args: []const [:0]const u8) !Command {
+    if (args.len < 1) {
+        return error.NoCommandProvided;
+    }
+    const cmdArg = args[0];
+    if (std.mem.eql(u8, cmdArg, "help")) {
+        return .help;
+    }
+    if (std.mem.eql(u8, cmdArg, "version")) {
+        return .version;
+    }
+    if (std.mem.eql(u8, cmdArg, "scan-cgroups")) {
+        // Parse Scan Options
+        var i: usize = 1;
+        var opts: ScanOptions = .{};
+        while (i < args.len) {
+            if (std.mem.eql(u8, args[i], "--root")) {
+                if (args.len <= i + 1) {
+                    return error.InvalidScanCommand;
+                }
+                // consume root
+                opts.root = args[i + 1];
+                i += 2;
+                continue;
+            } else {
+                return error.InvalidScanCommand;
+            }
+            i += 1;
+        }
+        return .{ .scan_cgroups = opts };
+    }
+    return error.UnknownCommand;
 }
 
 fn printUsage(writer: *Io.Writer) Io.Writer.Error!void {
@@ -68,15 +114,13 @@ fn printUsage(writer: *Io.Writer) Io.Writer.Error!void {
     , .{});
 }
 
-fn parseCommand(arg: [:0]const u8) !Command {
-    if (std.mem.eql(u8, arg, "help")) {
-        return .help;
-    }
-    if (std.mem.eql(u8, arg, "version")) {
-        return .version;
-    }
-    if (std.mem.eql(u8, arg, "scan-cgroups")) {
-        return .scan_cgroups;
-    }
-    return error.UnknownCommand;
+fn printScanUsage(writer: *Io.Writer) Io.Writer.Error!void {
+    try writer.print(
+        \\Usage:
+        \\  zidle scan-cgroups [--root PATH]
+        \\
+        \\Options:
+        \\  --root PATH   cgroup v2 mount/root to scan (default: /sys/fs/cgroup/)
+        \\
+    , .{});
 }

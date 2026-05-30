@@ -2,10 +2,9 @@
 const std = @import("std");
 const Io = std.Io;
 
-pub fn scanCGroups(io: Io, allocator: std.mem.Allocator) !([][]const u8) {
+pub fn scanCGroups(io: Io, allocator: std.mem.Allocator, root: []const u8) !([][]const u8) {
     var items = try std.ArrayList([]const u8).initCapacity(allocator, 10);
-    std.log.debug("Assuming cgroup2fs", .{});
-    const cgroups = try Io.Dir.openDirAbsolute(io, "/sys/fs/cgroup/", .{ .iterate = true });
+    const cgroups = try Io.Dir.openDirAbsolute(io, root, .{ .iterate = true });
     defer cgroups.close(io);
 
     var walker = try cgroups.walk(allocator);
