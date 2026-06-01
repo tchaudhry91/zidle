@@ -17,7 +17,7 @@ const ResourceStat = enum {
 const ResourceCounters = union(enum) {
     cpu: CPUCounters,
     memory: MemoryCounters,
-}
+};
 
 const CPUCounters = struct {
     usage_usec: usize,
@@ -31,8 +31,7 @@ const CPUCounters = struct {
     burst_usec: usize,
 };
 
-const MemoryCounters = struct {
-}
+const MemoryCounters = struct {};
 
 pub fn scanCGroups(io: Io, allocator: std.mem.Allocator, root: []const u8) !([][]const u8) {
     var items = try std.ArrayList([]const u8).initCapacity(allocator, 10);
