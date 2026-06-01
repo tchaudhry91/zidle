@@ -2,6 +2,18 @@
 const std = @import("std");
 const Io = std.Io;
 
+const CGroupFile = enum {
+    cpu_stat,
+    memory_stat,
+
+    pub fn filename(self: CGroupFile) []const u8 {
+        return switch (self) {
+            .cpu_stat => "cpu.stat",
+            .memory_stat => "memory.stat",
+        };
+    }
+};
+
 pub fn scanCGroups(io: Io, allocator: std.mem.Allocator, root: []const u8) !([][]const u8) {
     var items = try std.ArrayList([]const u8).initCapacity(allocator, 10);
     const cgroups = try Io.Dir.openDirAbsolute(io, root, .{ .iterate = true });
@@ -17,4 +29,27 @@ pub fn scanCGroups(io: Io, allocator: std.mem.Allocator, root: []const u8) !([][
     }
 
     return items.toOwnedSlice(allocator);
+}
+
+pub fn readStat(io: Io, allocator: std.mem.Allocator, cgroupPath: []const u8, f: CGroupFile) ![]u8 {
+    const fPath = try std.fs.path.join(allocator, &[_][]const u8{ cgroupPath, f.filename() });
+    defer allocator.free(fPath);
+    const statF = try std.Io.Dir.openFileAbsolute(io, fPath, .{});
+    defer statF.close(io);
+
+    var buffer: [4096]u8 = undefined;
+    var reader = statF.readerStreaming(io, &buffer);
+    return reader.interface.allocRemaining(allocator, .limited(16 * 1024));
+}
+
+test "readCPUStat" {
+    const contents = try readStat(std.testing.io, std.testing.allocator, "/sys/fs/cgroup/user.slice/", .cpu_stat);
+    defer std.testing.allocator.free(contents);
+    std.debug.print("\n\n{d}\n\n", .{contents.len});
+}
+
+test "readMemoryStat" {
+    const contents = try readStat(std.testing.io, std.testing.allocator, "/sys/fs/cgroup/user.slice/", .memory_stat);
+    defer std.testing.allocator.free(contents);
+    std.debug.print("\n\n{d}\n\n", .{contents.len});
 }
