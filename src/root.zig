@@ -3,16 +3,36 @@ const std = @import("std");
 const Io = std.Io;
 
 const ResourceStat = enum {
-    cpu_stat,
-    memory_stat,
+    cpu,
+    memory,
 
     pub fn filename(self: ResourceStat) []const u8 {
         return switch (self) {
-            .cpu_stat => "cpu.stat",
-            .memory_stat => "memory.stat",
+            .cpu => "cpu.stat",
+            .memory => "memory.stat",
         };
     }
 };
+
+const ResourceCounters = union(enum) {
+    cpu: CPUCounters,
+    memory: MemoryCounters,
+}
+
+const CPUCounters = struct {
+    usage_usec: usize,
+    user_usec: usize,
+    system_usec: usize,
+    nice_usec: usize,
+    nr_periods: usize,
+    nr_throttled: usize,
+    throttled_usec: usize,
+    nr_bursts: usize,
+    burst_usec: usize,
+};
+
+const MemoryCounters = struct {
+}
 
 pub fn scanCGroups(io: Io, allocator: std.mem.Allocator, root: []const u8) !([][]const u8) {
     var items = try std.ArrayList([]const u8).initCapacity(allocator, 10);
@@ -31,14 +51,14 @@ pub fn scanCGroups(io: Io, allocator: std.mem.Allocator, root: []const u8) !([][
     return items.toOwnedSlice(allocator);
 }
 
-pub fn parseCounters(io: Io, allocator: std.mem.Allocator, cgroup: []const u8, res: ResourceStat) !std.AutoHashMap([]const u8, usize) {
-    var counters: std.AutoHashMap([]const u8, usize) = .init(allocator);
-    defer counters.deinit();
+pub fn parseCounters(io: Io, allocator: std.mem.Allocator, cgroup: []const u8, res: ResourceStat) !std.StringHashMap(usize) {
+    var counters: std.StringHashMap(usize) = .init(allocator);
     const statContents = try readStat(io, allocator, cgroup, res);
     defer allocator.free(statContents);
     // Split by line
     var lineIterator = std.mem.tokenizeScalar(u8, statContents, '\n');
     while (lineIterator.next()) |line| {
+        std.debug.print("\nLine:{s}", .{line});
         if (line.len == 0) {
             continue;
         }
@@ -46,14 +66,16 @@ pub fn parseCounters(io: Io, allocator: std.mem.Allocator, cgroup: []const u8, r
         if (index == null) {
             continue;
         }
+        if (index.? + 1 >= line.len) {
+            continue;
+        }
         const key = line[0..index.?];
-        const val = try std.fmt.parseInt(usize, line[index.?..], 10) catch {
+        const val = std.fmt.parseInt(usize, line[index.? + 1 ..], 10) catch {
             continue;
         };
-
-        counters.put(key, val);
+        try counters.put(key, val);
     }
-    std.debug.print("{any}", counters);
+    return counters;
 }
 
 fn readStat(io: Io, allocator: std.mem.Allocator, cgroup: []const u8, res: ResourceStat) ![]u8 {
@@ -68,7 +90,10 @@ fn readStat(io: Io, allocator: std.mem.Allocator, cgroup: []const u8, res: Resou
 }
 
 test "readCPUCounters" {
-    const contents = try parseCounters(std.testing.io, std.testing.allocator, "/sys/fs/cgroup/user.slice/", .cpu_stat);
-    defer std.testing.allocator.free(contents);
-    std.debug.print("\n\n{d}\n\n", .{contents.len});
+    var counters = try parseCounters(std.testing.io, std.testing.allocator, "/sys/fs/cgroup/user.slice/", .cpu);
+    defer counters.deinit();
+    var iter = counters.iterator();
+    while (iter.next()) |item| {
+        std.debug.print("{s}=={d}", .{ item.key_ptr.*, item.value_ptr.* });
+    }
 }
