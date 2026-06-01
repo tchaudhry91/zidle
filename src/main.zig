@@ -54,7 +54,7 @@ pub fn main(init: std.process.Init) !void {
         .help => try printUsage(stdout_writer),
         .version => try printUsage(stdout_writer), // Wire Up Later
         .scan_cgroups => |opts| {
-            const cgroups = try zidle.scanCGroups(io, arena, opts.root);
+            const cgroups = try zidle.cgroup.scanCGroups(io, arena, opts.root);
             for (cgroups) |cg| {
                 try stdout_writer.print("{s}\n", .{cg});
             }
