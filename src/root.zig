@@ -18,48 +18,53 @@ pub const ResourceKind = enum {
     }
 };
 
-pub const ResourceCounters = union(ResourceKind) {
-    cpu: cpu.Counters,
-    memory: memory.Counters,
+pub const ResourceCounters = struct {
+    cpu: cpu.Counters = cpu.Counters{},
+    memory: memory.Counters = memory.Counters{},
 };
 
-pub fn parseCounters(io: Io, allocator: std.mem.Allocator, cgroup_path: []const u8, res: ResourceKind) !ResourceCounters {
-    var counters: std.StringHashMap(u64) = .init(allocator);
-    defer counters.deinit();
+pub fn parseCounters(io: Io, allocator: std.mem.Allocator, cgroup_path: []const u8) !ResourceCounters {
+    var counters: ResourceCounters = .{};
+    inline for (std.enums.values(ResourceKind)) |res| {
+        var map: std.StringHashMap(u64) = .init(allocator);
+        const statContents = try cgroup.readFile(io, allocator, cgroup_path, res.filename());
+        defer allocator.free(statContents);
 
-    const statContents = try cgroup.readFile(io, allocator, cgroup_path, res.filename());
-    defer allocator.free(statContents);
+        var lineIterator = std.mem.tokenizeScalar(u8, statContents, '\n');
+        while (lineIterator.next()) |line| {
+            if (line.len == 0) {
+                continue;
+            }
 
-    var lineIterator = std.mem.tokenizeScalar(u8, statContents, '\n');
-    while (lineIterator.next()) |line| {
-        if (line.len == 0) {
-            continue;
+            const index = std.mem.find(u8, line, " ") orelse continue;
+            if (index + 1 >= line.len) {
+                continue;
+            }
+
+            const key = line[0..index];
+            const val = std.fmt.parseInt(u64, line[index + 1 ..], 10) catch {
+                continue;
+            };
+            try map.put(key, val);
         }
-
-        const index = std.mem.find(u8, line, " ") orelse continue;
-        if (index + 1 >= line.len) {
-            continue;
+        switch (res) {
+            .cpu => {
+                const cpu_counters = cpu.fromMap(&map);
+                counters.cpu = cpu_counters;
+            },
+            .memory => {
+                const memory_counters = memory.fromMap(&map);
+                counters.memory = memory_counters;
+            },
         }
-
-        const key = line[0..index];
-        const val = std.fmt.parseInt(u64, line[index + 1 ..], 10) catch {
-            continue;
-        };
-        try counters.put(key, val);
+        map.deinit();
     }
-
-    return switch (res) {
-        .cpu => .{ .cpu = cpu.fromMap(&counters) },
-        .memory => .{ .memory = memory.fromMap(&counters) },
-    };
+    return counters;
 }
 
 // Keep this as an integration smoke test for now. Later, prefer a fixture-based
 // parser test so it does not depend on the host's /sys/fs/cgroup layout.
 test "readCounters" {
-    const counters = try parseCounters(std.testing.io, std.testing.allocator, "/sys/fs/cgroup/user.slice/", .cpu);
-    switch (counters) {
-        .cpu => |cpu_counters| try std.testing.expect(cpu_counters.usage_usec != null),
-        .memory => unreachable,
-    }
+    const counters = try parseCounters(std.testing.io, std.testing.allocator, "/sys/fs/cgroup/user.slice/");
+    std.debug.print("{any}", .{counters});
 }

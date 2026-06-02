@@ -1,12 +1,12 @@
 const std = @import("std");
 
 pub const Counters = struct {
-    anon: ?u64, // Anonymous memory such as heap, stack, and private writable mappings.
-    file: ?u64, // File-backed memory and page cache charged to the cgroup.
-    kernel: ?u64, // Kernel memory charged to the cgroup.
-    pgmajfault: ?u64, // Major page faults; useful as a disk/swap pressure delta.
-    pgscan: ?u64, // Pages scanned for reclaim; useful as a memory pressure delta.
-    pgsteal: ?u64, // Pages reclaimed; pairs with pgscan to show reclaim effectiveness.
+    anon: ?u64 = null, // Anonymous memory such as heap, stack, and private writable mappings.
+    file: ?u64 = null, // File-backed memory and page cache charged to the cgroup.
+    kernel: ?u64 = null, // Kernel memory charged to the cgroup.
+    pgmajfault: ?u64 = null, // Major page faults; useful as a disk/swap pressure delta.
+    pgscan: ?u64 = null, // Pages scanned for reclaim; useful as a memory pressure delta.
+    pgsteal: ?u64 = null, // Pages reclaimed; pairs with pgscan to show reclaim effectiveness.
 };
 
 pub fn fromMap(map: *const std.StringHashMap(u64)) Counters {
