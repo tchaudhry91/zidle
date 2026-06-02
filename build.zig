@@ -57,6 +57,7 @@ pub fn build(b: *std.Build) void {
     //
     // If neither case applies to you, feel free to delete the declaration you
     // don't need and to put everything under a single module.
+    const clap = b.dependency("clap", .{});
     const exe = b.addExecutable(.{
         .name = "zidle",
         .root_module = b.createModule(.{
@@ -79,6 +80,7 @@ pub fn build(b: *std.Build) void {
                 // can be extremely useful in case of collisions (which can happen
                 // importing modules from different packages).
                 .{ .name = "zidle", .module = mod },
+                .{ .name = "clap", .module = clap.module("clap") },
             },
         }),
     });
