@@ -1,8 +1,21 @@
 const std = @import("std");
 const Io = std.Io;
 
-pub fn scanCGroups(io: Io, allocator: std.mem.Allocator, root: []const u8) ![][]const u8 {
+pub const Paths = struct {
+    items: [][]const u8,
+    allocator: std.mem.Allocator,
+
+    pub fn deinit(self: Paths) void {
+        for (self.items) |item| {
+            self.allocator.free(item);
+        }
+        self.allocator.free(self.items);
+    }
+};
+
+pub fn scanCGroups(io: Io, allocator: std.mem.Allocator, root: []const u8) !Paths {
     var items = try std.ArrayList([]const u8).initCapacity(allocator, 10);
+    defer items.deinit(allocator);
     const cgroups = try Io.Dir.openDirAbsolute(io, root, .{ .iterate = true });
     defer cgroups.close(io);
 
@@ -15,7 +28,10 @@ pub fn scanCGroups(io: Io, allocator: std.mem.Allocator, root: []const u8) ![][]
         }
     }
 
-    return items.toOwnedSlice(allocator);
+    return Paths{
+        .items = try items.toOwnedSlice(allocator),
+        .allocator = allocator,
+    };
 }
 
 pub fn readFile(io: Io, allocator: std.mem.Allocator, cgroup_path: []const u8, filename: []const u8) ![]u8 {

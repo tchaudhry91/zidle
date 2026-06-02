@@ -36,6 +36,7 @@ pub fn main(init: std.process.Init) !void {
     // Accessing command line arguments:
     var iter = try init.minimal.args.iterateAllocator(gpa);
     defer iter.deinit();
+    _ = iter.next();
 
     var diag = clap.Diagnostic{};
     var res = clap.parseEx(clap.Help, &main_params, main_parsers, &iter, .{
@@ -50,21 +51,47 @@ pub fn main(init: std.process.Init) !void {
 
     if (res.args.help != 0) {
         try clap.helpToFile(io, .stderr(), clap.Help, &main_params, .{});
+        return;
     }
 
     const command: SubCommand = res.positionals[0] orelse return error.NoCommandProvided;
 
     switch (command) {
         .help => try clap.helpToFile(io, .stderr(), clap.Help, &main_params, .{}),
-        .scan => try scanMain(io, gpa, &iter, res),
+        .scan => try scanMain(io, gpa, stdout_writer, &iter, res),
     }
 
     try stdout_writer.flush(); // Don't forget to flush!
 }
 
-fn scanMain(io: std.Io, allocator: std.mem.Allocator, iter: *std.process.Args.Iterator, main_args: MainArgs) !void {
-    _ = io;
-    _ = allocator;
-    _ = iter;
+fn scanMain(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.Writer, iter: *std.process.Args.Iterator, main_args: MainArgs) !void {
     _ = main_args;
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help Help and Usage
+        \\    --root <str> Root to Scan CGroups in
+        \\
+    );
+
+    var diag = clap.Diagnostic{};
+    var res = clap.parseEx(clap.Help, &params, clap.parsers.default, iter, .{ .diagnostic = &diag, .allocator = allocator, .assignment_separators = "=" }) catch |err| {
+        try diag.reportToFile(io, .stderr(), err);
+        return err;
+    };
+    defer res.deinit();
+
+    if (res.args.help != 0) {
+        try clap.helpToFile(io, .stderr(), clap.Help, &params, .{});
+        return;
+    }
+
+    var root: []const u8 = "/sys/fs/cgroup/";
+    if (res.args.root) |r| {
+        root = r;
+    }
+
+    const cgroups = try zidle.cgroup.scanCGroups(io, allocator, root);
+    defer cgroups.deinit();
+    for (cgroups.items) |cgroup| {
+        try writer.print("{s}", .{cgroup});
+    }
 }
