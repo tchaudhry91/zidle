@@ -1,21 +1,30 @@
 const std = @import("std");
+const cgroup = @import("cgroup.zig");
 
-pub const Counters = struct {
-    anon: ?u64 = null, // Anonymous memory such as heap, stack, and private writable mappings.
-    file: ?u64 = null, // File-backed memory and page cache charged to the cgroup.
-    kernel: ?u64 = null, // Kernel memory charged to the cgroup.
-    pgmajfault: ?u64 = null, // Major page faults; useful as a disk/swap pressure delta.
-    pgscan: ?u64 = null, // Pages scanned for reclaim; useful as a memory pressure delta.
-    pgsteal: ?u64 = null, // Pages reclaimed; pairs with pgscan to show reclaim effectiveness.
+pub const Stats = struct {
+    current: ?u64 = null,
+    max: ?u64 = null,
+    high: ?u64 = null,
+    peak: ?u64 = null,
 };
 
-pub fn fromMap(map: *const std.StringHashMap(u64)) Counters {
-    return .{
-        .anon = map.get("anon"),
-        .file = map.get("file"),
-        .kernel = map.get("kernel"),
-        .pgmajfault = map.get("pgmajfault"),
-        .pgscan = map.get("pgscan"),
-        .pgsteal = map.get("pgsteal"),
-    };
+pub fn getMemoryStats(io: std.Io, allocator: std.mem.Allocator, cgroup_path: []const u8) !Stats {
+    var stats: Stats = .{};
+    const current = try cgroup.readFile(io, allocator, cgroup_path, "memory.current");
+    stats.current = std.fmt.parseInt(u64, std.mem.trim(u8, current, "\n\t "), 10) catch null;
+    allocator.free(current);
+
+    const max = try cgroup.readFile(io, allocator, cgroup_path, "memory.max");
+    stats.max = std.fmt.parseInt(u64, std.mem.trim(u8, max, "\n\t "), 10) catch null;
+    allocator.free(max);
+
+    const high = try cgroup.readFile(io, allocator, cgroup_path, "memory.high");
+    stats.high = std.fmt.parseInt(u64, std.mem.trim(u8, high, "\n\t "), 10) catch null;
+    allocator.free(high);
+
+    const peak = try cgroup.readFile(io, allocator, cgroup_path, "memory.peak");
+    stats.peak = std.fmt.parseInt(u64, std.mem.trim(u8, peak, "\n\t "), 10) catch null;
+    allocator.free(peak);
+
+    return stats;
 }

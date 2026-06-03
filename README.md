@@ -1,49 +1,44 @@
 # zidle
 
-Idle detection experiments for Linux cgroups, written in Zig.
+`zidle` is a Linux node-local experiment for detecting quiescent Kubernetes pods from kernel-visible resource counters.
 
-`zidle` is currently a learning project: first understand Linux cgroup/procfs counters, then layer Kubernetes pod awareness on top.
+The core idea is simple:
 
-## Current status
+> Build a Linux node tool that happens to understand Kubernetes cgroups.
 
-Implemented so far:
+Kubernetes is the environment, but the learning target is Linux: cgroup v2, procfs, network namespaces, and resource accounting.
 
-- basic CLI command dispatch
-- `zidle help`
-- `zidle scan-cgroups`
-- recursive cgroup v2 directory discovery
-- configurable cgroup root via `--root`
+## Goal
 
-## Usage
+`zidle` should eventually answer questions like:
 
-```bash
-zig build run -- help
-zig build run -- scan-cgroups
-zig build run -- scan-cgroups --root /sys/fs/cgroup
-```
+> Has this pod shown little or no CPU, IO, network, or process activity over a time window?
 
-`scan-cgroups` expects a cgroup v2 root. On a normal Linux host this is usually:
+The useful output is not just raw metrics. The long-term aim is to emit evidence-backed state transitions such as idle, low-activity, active, or unknown.
 
-```text
-/sys/fs/cgroup
-```
+## Data sources
 
-When running inside a container with the host cgroup filesystem mounted, this may become something like:
+The project focuses on read-only Linux interfaces:
 
-```text
-/host/sys/fs/cgroup
-```
+- cgroup v2 CPU, memory, IO, and PID counters
+- procfs process and network namespace files
+- node-local Kubernetes/kubelet files where useful for pod identity
 
-## Next milestone
+No Kubernetes API is required for the early design.
 
-Parse one cgroup counter file:
+## Non-goals
 
-```text
-cpu.stat -> usage_usec
-```
+`zidle` is not:
 
-Suggested next shape:
+- a pod hibernation system
+- an autoscaler
+- a remediation tool
+- a safety oracle for deleting or stopping workloads
 
-- add a small `CpuStat` struct
-- write a pure parser for `cpu.stat` contents
-- add tests using fixture strings before reading real files
+It observes and reports. It should not mutate cluster state.
+
+## Project notes
+
+This is a learning project written in Zig. Prefer small, inspectable steps over large abstractions or dependencies.
+
+For the fuller design sketch, see [`spec.md`](./spec.md).

@@ -6,65 +6,24 @@ pub const cgroup = @import("cgroup.zig");
 pub const cpu = @import("cpu.zig");
 pub const memory = @import("memory.zig");
 
-pub const ResourceKind = enum {
-    cpu,
-    memory,
-
-    pub fn filename(self: ResourceKind) []const u8 {
-        return switch (self) {
-            .cpu => "cpu.stat",
-            .memory => "memory.stat",
-        };
-    }
+pub const ResourceStats = struct {
+    cpu: cpu.Stats = cpu.Stats{},
+    memory: memory.Stats = memory.Stats{},
 };
 
-pub const ResourceCounters = struct {
-    cpu: cpu.Counters = cpu.Counters{},
-    memory: memory.Counters = memory.Counters{},
-};
+pub fn getStats(io: Io, allocator: std.mem.Allocator, cgroup_path: []const u8) !ResourceStats {
+    var stats: ResourceStats = .{};
 
-pub fn parseCounters(io: Io, allocator: std.mem.Allocator, cgroup_path: []const u8) !ResourceCounters {
-    var counters: ResourceCounters = .{};
-    inline for (std.enums.values(ResourceKind)) |res| {
-        var map: std.StringHashMap(u64) = .init(allocator);
-        const statContents = try cgroup.readFile(io, allocator, cgroup_path, res.filename());
-        defer allocator.free(statContents);
+    // CPU
+    stats.cpu = try cpu.getCPUStats(io, allocator, cgroup_path);
 
-        var lineIterator = std.mem.tokenizeScalar(u8, statContents, '\n');
-        while (lineIterator.next()) |line| {
-            if (line.len == 0) {
-                continue;
-            }
+    // Memory
+    stats.memory = try memory.getMemoryStats(io, allocator, cgroup_path);
 
-            const index = std.mem.find(u8, line, " ") orelse continue;
-            if (index + 1 >= line.len) {
-                continue;
-            }
-
-            const key = line[0..index];
-            const val = std.fmt.parseInt(u64, line[index + 1 ..], 10) catch {
-                continue;
-            };
-            try map.put(key, val);
-        }
-        switch (res) {
-            .cpu => {
-                const cpu_counters = cpu.fromMap(&map);
-                counters.cpu = cpu_counters;
-            },
-            .memory => {
-                const memory_counters = memory.fromMap(&map);
-                counters.memory = memory_counters;
-            },
-        }
-        map.deinit();
-    }
-    return counters;
+    return stats;
 }
 
-// Keep this as an integration smoke test for now. Later, prefer a fixture-based
-// parser test so it does not depend on the host's /sys/fs/cgroup layout.
-test "readCounters" {
-    const counters = try parseCounters(std.testing.io, std.testing.allocator, "/sys/fs/cgroup/user.slice/");
-    std.debug.print("{any}", .{counters});
+test "getStats" {
+    const stats = try getStats(std.testing.io, std.testing.allocator, "/sys/fs/cgroup/system.slice/docker-294b69a239ad3697bcbfd4acbd35f130a34857a3736a68fd0790ffc7364e9723.scope");
+    std.debug.print("{any}\n", .{stats});
 }
