@@ -54,7 +54,10 @@ pub fn main(init: std.process.Init) !void {
         return;
     }
 
-    const command: SubCommand = res.positionals[0] orelse return error.NoCommandProvided;
+    const command: SubCommand = res.positionals[0] orelse {
+        try clap.helpToFile(io, .stderr(), clap.Help, &main_params, .{});
+        return;
+    };
 
     switch (command) {
         .help => try clap.helpToFile(io, .stderr(), clap.Help, &main_params, .{}),
@@ -92,6 +95,6 @@ fn scanMain(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.Writer, it
     const cgroups = try zidle.cgroup.scanCGroups(io, allocator, root);
     defer cgroups.deinit();
     for (cgroups.items) |cgroup| {
-        try writer.print("{s}", .{cgroup});
+        try writer.print("{s}\n", .{cgroup});
     }
 }
