@@ -22,8 +22,3 @@ pub fn getStats(io: Io, allocator: std.mem.Allocator, cgroup_path: []const u8) !
 
     return stats;
 }
-
-test "getStats" {
-    const stats = try getStats(std.testing.io, std.testing.allocator, "/sys/fs/cgroup/system.slice/docker-294b69a239ad3697bcbfd4acbd35f130a34857a3736a68fd0790ffc7364e9723.scope");
-    std.debug.print("{any}\n", .{stats});
-}

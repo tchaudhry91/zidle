@@ -55,3 +55,27 @@ fn fromCPUStatContents(statContents: []const u8) Stats {
     }
     return stats;
 }
+
+test "fromCPUStatContents parses cpu.stat sample" {
+    const contents =
+        \\usage_usec 6136726436
+        \\user_usec 2802966952
+        \\system_usec 3333759483
+        \\nice_usec 28555532
+        \\core_sched.force_idle_usec 0
+        \\nr_periods 0
+        \\nr_throttled 0
+        \\throttled_usec 0
+        \\nr_bursts 0
+        \\burst_usec 0
+        \\
+    ;
+
+    const stats = fromCPUStatContents(contents);
+
+    try std.testing.expectEqual(@as(?u64, 6136726436), stats.usage_usec);
+    try std.testing.expectEqual(@as(?u64, 2802966952), stats.user_usec);
+    try std.testing.expectEqual(@as(?u64, 3333759483), stats.system_usec);
+    try std.testing.expectEqual(@as(?u64, 0), stats.throttled_usec);
+    try std.testing.expectEqual(@as(?u64, 0), stats.burst_usec);
+}
